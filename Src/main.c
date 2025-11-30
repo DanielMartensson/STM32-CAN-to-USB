@@ -18,8 +18,11 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "dma.h"
 #include "spi.h"
+#include "usart.h"
 #include "gpio.h"
+#include <stdbool.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -34,6 +37,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define RX_DATA_SIZE 14
+#define TX_DATA_SIZE 20
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -47,6 +52,9 @@
 /* Private variables ---------------------------------------------------------*/
 uCAN_MSG txMessage;
 uCAN_MSG rxMessage;
+uint8_t RX_DATA[RX_DATA_SIZE];
+volatile uint8_t TX_DATA[TX_DATA_SIZE];
+bool is_new_message = false;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -58,7 +66,21 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
+	txMessage.frame.idType = RX_DATA[0]; /* STD (1) or EXT (2) */
+	txMessage.frame.id = (RX_DATA[4] << 24) | (RX_DATA[3] << 16) | (RX_DATA[2] << 8) | RX_DATA[1];
+	txMessage.frame.dlc = RX_DATA[5];
+	txMessage.frame.data0 = RX_DATA[6];
+	txMessage.frame.data1 = RX_DATA[7];
+	txMessage.frame.data2 = RX_DATA[8];
+	txMessage.frame.data3 = RX_DATA[9];
+	txMessage.frame.data4 = RX_DATA[10];
+	txMessage.frame.data5 = RX_DATA[11];
+	txMessage.frame.data6 = RX_DATA[12];
+	txMessage.frame.data7 = RX_DATA[13];
+	is_new_message = true;
+	HAL_UART_Receive_DMA(&huart2, RX_DATA, RX_DATA_SIZE);
+}
 /* USER CODE END 0 */
 
 /**
@@ -67,6 +89,7 @@ void SystemClock_Config(void);
   */
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
   
   /* USER CODE END 1 */
@@ -89,10 +112,16 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_SPI1_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
+
+  /* In this function you can set the filter and the baudrate for the MCP2515 modle */
   CANSPI_Initialize();	
-  
+
+  /* Listen for RX_DATA_SIZE bytes from USB */
+  HAL_UART_Receive_DMA(&huart2, RX_DATA, RX_DATA_SIZE);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -102,36 +131,36 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    if(CANSPI_Receive(&rxMessage))
-    {
-      txMessage.frame.idType = rxMessage.frame.idType;
-      txMessage.frame.id = rxMessage.frame.id;
-      txMessage.frame.dlc = rxMessage.frame.dlc;
-      txMessage.frame.data0++;
-      txMessage.frame.data1 = rxMessage.frame.data1;
-      txMessage.frame.data2 = rxMessage.frame.data2;
-      txMessage.frame.data3 = rxMessage.frame.data3;
-      txMessage.frame.data4 = rxMessage.frame.data4;
-      txMessage.frame.data5 = rxMessage.frame.data5;
-      txMessage.frame.data6 = rxMessage.frame.data6;
-      txMessage.frame.data7 = rxMessage.frame.data7;
-      CANSPI_Transmit(&txMessage);
+    if(CANSPI_Receive(&rxMessage)){
+    	TX_DATA[0] = rxMessage.frame.idType;
+        TX_DATA[1] = (rxMessage.frame.id >> 24) & 0xFF;
+        TX_DATA[2] = (rxMessage.frame.id >> 16) & 0xFF;
+        TX_DATA[3] = (rxMessage.frame.id >> 8) & 0xFF;
+        TX_DATA[4] = rxMessage.frame.id & 0xFF;
+        TX_DATA[5] = rxMessage.frame.dlc;
+        TX_DATA[6] = rxMessage.frame.data0;
+        TX_DATA[7] = rxMessage.frame.data1;
+        TX_DATA[8] = rxMessage.frame.data2;
+        TX_DATA[9] = rxMessage.frame.data3;
+        TX_DATA[10] = rxMessage.frame.data4;
+        TX_DATA[11] = rxMessage.frame.data5;
+        TX_DATA[12] = rxMessage.frame.data6;
+        TX_DATA[13] = rxMessage.frame.data7;
+        TX_DATA[14] = 'S';
+        TX_DATA[15] = 'T';
+        TX_DATA[16] = 'M';
+        TX_DATA[17] = '3';
+        TX_DATA[18] = '2';
+        TX_DATA[19] = '\0';
+        HAL_UART_Transmit(&huart2, TX_DATA, TX_DATA_SIZE, 100);
     }  
     
-    txMessage.frame.idType = dSTANDARD_CAN_MSG_ID_2_0B;
-    txMessage.frame.id = 0x0A;
-    txMessage.frame.dlc = 8;
-    txMessage.frame.data0 = 0;
-    txMessage.frame.data1 = 1;
-    txMessage.frame.data2 = 2;
-    txMessage.frame.data3 = 3;
-    txMessage.frame.data4 = 4;
-    txMessage.frame.data5 = 5;
-    txMessage.frame.data6 = 6;
-    txMessage.frame.data7 = 7;
-    CANSPI_Transmit(&txMessage);
-    
-    HAL_Delay(1000);
+    if(is_new_message){
+        CANSPI_Transmit(&txMessage);
+    	is_new_message = false;
+    }
+
+    HAL_Delay(1);
     
   }
   /* USER CODE END 3 */
@@ -193,8 +222,7 @@ void Error_Handler(void)
   }
   /* USER CODE END Error_Handler_Debug */
 }
-
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.

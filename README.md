@@ -1,11 +1,18 @@
-# STM32_SPI_MCP2515
-STM32 + MCP2515 CAN Example
+# STM32 CAN to USB
 
-STM32F103RB Nucleo board & Sparkfun CAN-Bus Shield were used for example.
+This is a small project for connecting a Nucleo STM32F103RB together with MCP2515 CAN module.
+
+Pin configuration:
+
+ * CAN_CS : D10 (PB6) -
+ * SPI_MOSI : D11 (PA7)
+ * SPI_MISO : D12 (PA6)
+ * SPI_SCK : D13 (PA5)
+ 
+ 
+
+
+
+Original source:
 https://blog.naver.com/eziya76/221188525127
 
-I've downloaded MCP2515 SPI libraries form Microchip site and modified them for STM32 HAL library.
-
-Reference 
- - https://www.microchip.com/forums/download.axd?file=0;993019
- - http://ww1.microchip.com/downloads/en/DeviceDoc/21801F.pdf 
